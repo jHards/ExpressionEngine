@@ -38,14 +38,18 @@ class Member_auth extends Member {
 			$login_form = $this->_allow_if('auto_login', $login_form);
 		}
 
-		// match {form_declaration} or {form_declaration return="foo"}
-		// [0] => {form_declaration return="foo"}
-		// [1] => form_declaration return="foo"
-		// [2] =>  return="foo"
-		// [3] => "
-		// [4] => foo
-		preg_match("/".LD."(form_declaration"."(\s+return\s*=\s*(\042|\047)([^\\3]*?)\\3)?)".RD."/s",
-					$login_form, $match);
+		// match
+		//	-> {form_declaration},
+		//  -> {form_declaration return="foo"},
+		//  -> {form_declaration form_class="bar" return="foo"}
+		// [0] =>  {form_declaration} OR {form_declaration return="foo"} OR {form_declaration form_class="bar" return="foo"}
+		// [1] =>  form_declaration OR form_declaration return="foo" OR form_declaration form_class="bar" return="foo"
+		// [2] =>  null OR return OR form_class
+		// [3] =>  null OR foo OR bar
+		// [4] =>  null OR null OR return
+		// [5] =>  null OR null OR foo										
+		preg_match('/'.LD."(form_declaration\s*([\w'-]*)\s*[=]*\s*[\042\047]?([\w'-]*)[\042\047]?\s*([\w'-]*)\s*[=]*\s*[\042\047]?([\w'-]*)[\042\047]?\s*)".RD.'/',
+				   $login_form, $match);
 
 		if (empty($match))
 		{
@@ -53,12 +57,22 @@ class Member_auth extends Member {
 			// the template does not contain a {form_declaration}
 			return;
 		}
+		
+		// assign any parameters to an array to provide flexibility for the front-end tag
+		if (isset($match['2']))
+		{
+			$match_params[$match['2']] = $match['3'];
+		}
+		if (isset($match['4']))
+		{
+			$match_params[$match['4']] = $match['5'];
+		}
 
 		$data['hidden_fields']['ACT']	= ee()->functions->fetch_action_id('Member', 'member_login');
 
-		if (isset($match['4']))
+		if (isset($match_params['return']))
 		{
-			$data['hidden_fields']['RET'] = (substr($match['4'], 0, 4) !== 'http') ? ee()->functions->create_url($match['4']) : $match['4'];
+			$data['hidden_fields']['RET'] = (substr($match_params['return'], 0, 4) !== 'http') ? ee()->functions->create_url($match_params['return']) : $match_params['return'];
 		}
 		elseif ($this->in_forum == TRUE)
 		{
@@ -72,6 +86,11 @@ class Member_auth extends Member {
 		$data['hidden_fields']['FROM'] = ($this->in_forum === TRUE) ? 'forum' : '';
 		$data['id']	  = 'member_login_form';
 
+		if (isset($match_params['form_class']))
+		{
+			$data['class'] = $match_params['form_class'];
+		}
+		
 		$this->_set_page_title(lang('member_login'));
 
 		return $this->_var_swap($login_form, array(
